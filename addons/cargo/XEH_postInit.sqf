@@ -49,7 +49,45 @@
     params ["_item", "_emptyPosAGL"];
 
     _item hideObjectGlobal false;
-    _item setPosASL (AGLtoASL _emptyPosAGL);
+
+    if (surfaceIsWater _emptyPosAGL) then
+    {
+        // water surface or carrier -> use players height + 10 cm on ASL
+        _emptyPosAGL set [2, (getPosASL (vehicle player) select 2) + 0.2];
+
+        // near homebase? (carrier) -> use flag-height
+        if ((_emptyPosAGL distance2D homeflag_east) < 300) then
+        {
+            _emptyPosAGL set [2, (getPosASL homeflag_east select 2) + 0.1]; 
+        }
+        else 
+        {
+            if ((_emptyPosAGL distance2D homeflag_west) < 300) then
+            {
+                _emptyPosAGL set [2, (getPosASL homeflag_west select 2) + 0.1]; 
+            };
+        };
+
+        _item setPosASL (_emptyPosAGL);
+    }
+    else // land surface
+    {
+        // ground-unloading? -> height zero to snap on ground
+        if (_emptyPosAGL select 2 < 10) then
+        {
+            _emptyPosAGL set [2, 0.1];
+            _item setPos _emptyPosAGL;
+        }
+        // airdrop? -> original conversation of height
+        else
+        {
+            _item setPosASL (AGLtoASL _emptyPosAGL);
+        };
+    };
+    
+    // repair broken engine - whatever...
+    _item setDamage 0;
+    _item setFuel 1;
 
     [_item, "blockDamage", "ACE_cargo", false] call EFUNC(common,statusEffect_set);
 }] call CBA_fnc_addEventHandler;

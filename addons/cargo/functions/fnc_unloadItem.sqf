@@ -52,9 +52,15 @@ if (_item isEqualType objNull) then {
     // hideObjectGlobal must be executed before setPos to ensure light objects are rendered correctly
     // do both on server to ensure they are executed in the correct order
     [QGVAR(serverUnload), [_item, _emptyPosAGL]] call CBA_fnc_serverEvent;
+    _item setDir (getDir _vehicle);
+    _item setDamage 0;
+    _item setFuel 1;
 } else {
     private _newItem = createVehicle [_item, _emptyPosAGL, [], 0, "NONE"];
     _newItem setPosASL (AGLtoASL _emptyPosAGL);
+    _newItem setDir (getDir _vehicle);
+    _newItem setDamage 0;
+    _newItem setFuel 1;
 };
 
 true

@@ -32,11 +32,23 @@ private _cargoSpace = [_vehicle] call FUNC(getCargoSpaceLeft);
 private _itemSize = [_item] call FUNC(getSizeItem);
 _vehicle setVariable [QGVAR(space), (_cargoSpace + _itemSize), true];
 
-(boundingBoxReal _vehicle) params ["_bb1", "_bb2"];
-private _distBehind = ((_bb1 select 1) min (_bb2 select 1)) - 4; // 4 meters behind max bounding box
-TRACE_1("",_distBehind);
-private _posBehindVehicleAGL = _vehicle modelToWorld [0, _distBehind, -2];
+private _typeOfCargo = if (_item isEqualType "") then {_item} else {typeOf _item};
 
+// keep additional space between both vehicles
+private _safetyDistance = 20;
+
+// find safe position behind transporter
+(boundingBoxReal _vehicle) params ["_transporter_bb1", "_transporter_bb2"];
+private _distToBackLimit = (_transporter_bb1 select 1) min (_transporter_bb2 select 1);
+
+// temporarily create vehicle to get physical size of it (at least one has to exist on map somewhere)
+private _vec = createVehicle [_typeOfCargo, [(random 100) - 50, (random 100) - 50, 1000 + random 100], [], 0, "NONE"];
+(boundingBoxReal _vec) params ["_cargo_bb1", "_cargo_bb2"];
+private _distToFrontLimit = (_cargo_bb1 select 1) max (_cargo_bb2 select 1);
+deleteVehicle _vec;
+
+// calculate position behind transporter with a safe distance
+private _posBehindVehicleAGL = _vehicle modelToWorld [0, - (_distToFrontLimit - _distToBackLimit + _safetyDistance), -2];
 
 private _itemObject = if (_item isEqualType objNull) then {
     detach _item;
@@ -52,7 +64,7 @@ private _itemObject = if (_item isEqualType objNull) then {
 
 _itemObject setVelocity ((velocity _vehicle) vectorAdd ((vectorNormalized (vectorDir _vehicle)) vectorMultiply -5));
 
-// open parachute and ir light effect
+// open parachute and attach smoke shell
 [{
     params ["_item"];
 
@@ -66,34 +78,42 @@ _itemObject setVelocity ((velocity _vehicle) vectorAdd ((vectorNormalized (vecto
 
     private _velocity = velocity _item;
 
-    _item attachTo [_parachute, [0,0,1]];
+    _item allowDamage false;
+    _item attachTo [_parachute, [0,0,3]];
     _parachute setVelocity _velocity;
 
-    if ((GVAR(disableParadropEffectsClasstypes) findIf {_item isKindOf _x}) == -1) then {
-        private _light = "Chemlight_yellow" createVehicle [0,0,0];
-        _light attachTo [_item, [0,0,0]];
-    };
+    private _smoke = "SmokeshellYellow" createVehicle [0,0,0];
+    _smoke attachTo [_item, [0,0,0]];
+
+    // delete smoke and repair vehicle when landed
+    [{
+        (_this select 0) params ["_item"];
+
+        if (isNull _item) exitWith {
+            [_this select 1] call CBA_fnc_removePerFrameHandler;
+        };
+        
+        // vehicle landed?
+        if ((getPos _item select 2) < 3 && (abs (velocity _item select 2)) < 0.2) then
+        {
+            // detach and delete all smokeshells
+            { 
+                if (typeOf _x == "SmokeshellYellow") then
+                {
+                    detach _x;
+                    deleteVehicle _x;
+                };
+            } forEach attachedObjects _item;
+
+            // repair + refuel
+            _item setDamage 0;
+            _item setFuel 1;
+            _item allowDamage true;
+            [_this select 1] call CBA_fnc_removePerFrameHandler;
+        };
+    }, 1, [_item]] call CBA_fnc_addPerFrameHandler;
 
 }, [_itemObject], 0.7] call CBA_fnc_waitAndExecute;
-
-// smoke effect when crate landed
-[{
-    (_this select 0) params ["_item"];
-
-    if (isNull _item) exitWith {
-        [_this select 1] call CBA_fnc_removePerFrameHandler;
-    };
-
-    if (getPos _item select 2 < 1) then {
-        if ((GVAR(disableParadropEffectsClasstypes) findIf {_item isKindOf _x}) == -1) then {
-            private _smoke = "SmokeshellYellow" createVehicle [0,0,0];
-            _smoke attachTo [_item, [0,0,0]];
-        };
-
-        [_this select 1] call CBA_fnc_removePerFrameHandler;
-    };
-
-}, 1, [_itemObject]] call CBA_fnc_addPerFrameHandler;
 
 if (_showHint) then {
     [
